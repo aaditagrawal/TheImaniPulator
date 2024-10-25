@@ -206,11 +206,13 @@ public class TheImaniPulator extends Application {
         Label saveLabel = new Label("Save Options");
         Label specialLabel = new Label("Special Effects");
         Label musicLabel = new Label("Music Controls");
+        Label resetLabel = new Label("Reset Options");
 
         filterLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16px;");
         saveLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16px;");
         specialLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16px;");
         musicLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16px;");
+        resetLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16px;");
 
         Button blurButton = new Button("Blur");
         Button grayscaleButton = new Button("Grayscale");
@@ -224,12 +226,22 @@ public class TheImaniPulator extends Application {
         Button pauseMusicButton = new Button("Pause Music");
         Button vignetteButton = new Button("Vignette");
 
+        // Style reset button differently
+        resetButton.setStyle(
+            "-fx-background-color: black;" +
+            "-fx-text-fill: white;" +
+            "-fx-font-family: 'SF Pro Text';" +
+            "-fx-font-size: 16px;" +
+            "-fx-padding: 12px 20px;" +
+            "-fx-background-radius: 10px;" +
+            "-fx-cursor: hand;"
+        );
+
         int buttonWidth = 150;
         for (Button btn : new Button[] {
             blurButton,
             grayscaleButton,
             sepiaButton,
-            resetButton,
             saveAsJpegButton,
             saveAsPngButton,
             saveAsHeifButton,
@@ -249,8 +261,12 @@ public class TheImaniPulator extends Application {
         filterGrid.add(blurButton, 0, 0);
         filterGrid.add(grayscaleButton, 1, 0);
         filterGrid.add(sepiaButton, 0, 1);
-        filterGrid.add(resetButton, 1, 1);
         filterGrid.add(vignetteButton, 0, 2);
+
+        GridPane resetGrid = new GridPane();
+        resetGrid.setHgap(10);
+        resetGrid.setVgap(10);
+        resetGrid.add(resetButton, 0, 0);
 
         GridPane saveGrid = new GridPane();
         saveGrid.setHgap(10);
@@ -318,7 +334,7 @@ public class TheImaniPulator extends Application {
         });
 
         saveAsJpegButton.setOnAction(e -> {
-            saveImage(primaryStage, "jpeg");
+            saveImage(primaryStage, "jpg"); // Changed from jpeg to jpg
             updateStatus("Saving as JPEG");
         });
 
@@ -389,6 +405,8 @@ public class TheImaniPulator extends Application {
                 titleLabel,
                 filterLabel,
                 filterGrid,
+                resetLabel,
+                resetGrid,
                 saveLabel,
                 saveGrid,
                 specialLabel,
@@ -444,10 +462,29 @@ public class TheImaniPulator extends Application {
             File file = fileChooser.showSaveDialog(stage);
             if (file != null) {
                 try {
-                    BufferedImage bufferedImage = SwingFXUtils.fromFXImage(
-                        imageView.getImage(),
-                        null
+                    // Get the original image directly instead of taking a snapshot
+                    Image image = imageView.getImage();
+                    int width = (int) image.getWidth();
+                    int height = (int) image.getHeight();
+
+                    BufferedImage bufferedImage = new BufferedImage(
+                        width,
+                        height,
+                        BufferedImage.TYPE_INT_RGB
                     );
+
+                    PixelReader reader = image.getPixelReader();
+                    for (int x = 0; x < width; x++) {
+                        for (int y = 0; y < height; y++) {
+                            Color color = reader.getColor(x, y);
+                            int rgb =
+                                ((int) (color.getRed() * 255) << 16) |
+                                ((int) (color.getGreen() * 255) << 8) |
+                                ((int) (color.getBlue() * 255));
+                            bufferedImage.setRGB(x, y, rgb);
+                        }
+                    }
+
                     ImageIO.write(bufferedImage, format, file);
                 } catch (IOException ex) {
                     Alert alert = new Alert(AlertType.ERROR);
