@@ -38,18 +38,23 @@ public class ImageProcessor {
         }
     }
 
-    public static void applyInvert(ImageView imageView) {
+    public static void applyVignette(ImageView imageView) {
         if (imageView.getImage() != null) {
-            ColorAdjust colorAdjust = new ColorAdjust();
-            colorAdjust.setBrightness(-1.0);
-            colorAdjust.setContrast(0);
-            colorAdjust.setHue(1.0);
-            colorAdjust.setSaturation(-1.0);
+            // Create radial gradient for vignette effect
+            double width = imageView.getImage().getWidth();
+            double height = imageView.getImage().getHeight();
+            double radius = Math.max(width, height) * 0.7; // Adjust this value to control vignette size
 
             InnerShadow innerShadow = new InnerShadow();
-            innerShadow.setRadius(5.0);
-            innerShadow.setColor(Color.rgb(255, 255, 255, 0.3));
-            innerShadow.setInput(colorAdjust);
+            innerShadow.setRadius(radius * 0.3);
+            innerShadow.setChoke(0.2);
+            innerShadow.setColor(Color.rgb(0, 0, 0, 0.7));
+
+            DropShadow dropShadow = new DropShadow();
+            dropShadow.setRadius(radius * 0.2);
+            dropShadow.setSpread(0.4);
+            dropShadow.setColor(Color.rgb(0, 0, 0, 0.6));
+            dropShadow.setInput(innerShadow);
 
             FadeTransition ft = new FadeTransition(
                 Duration.millis(300),
@@ -58,7 +63,7 @@ public class ImageProcessor {
             ft.setFromValue(0.7);
             ft.setToValue(1.0);
 
-            imageView.setEffect(innerShadow);
+            imageView.setEffect(dropShadow);
             ft.play();
         }
     }
