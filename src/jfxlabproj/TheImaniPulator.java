@@ -3,7 +3,16 @@ package jfxlabproj;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.Map;
+import java.util.PriorityQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -14,6 +23,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.image.PixelReader;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -33,12 +43,111 @@ public class TheImaniPulator extends Application {
     private Button activeButton = null;
     private Label statusLabel;
 
+    // Store color frequency analysis results
+    private LinkedList<String> topColors;
+
+    // Helper class to store color counts for sorting
+    private class ColorCount implements Comparable<ColorCount> {
+
+        String hexColor;
+        int count;
+
+        ColorCount(String hexColor, int count) {
+            this.hexColor = hexColor;
+            this.count = count;
+        }
+
+        @Override
+        public int compareTo(ColorCount other) {
+            return other.count - this.count; // For descending order
+        }
+    }
+
+    // Method to analyze color frequencies in image
+    private void analyzeColors() {
+        if (originalImage == null) return;
+
+        // Use ConcurrentHashMap for thread safety
+        Map<String, Integer> colorFrequency = new ConcurrentHashMap<>();
+
+        // Get PixelReader to read image colors
+        PixelReader pixelReader = originalImage.getPixelReader();
+
+        int height = (int) originalImage.getHeight();
+        int width = (int) originalImage.getWidth();
+        int numThreads = Runtime.getRuntime().availableProcessors();
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+
+        // Split image into rows for parallel processing
+        int rowsPerThread = height / numThreads;
+
+        for (int i = 0; i < numThreads; i++) {
+            final int startY = i * rowsPerThread;
+            final int endY = (i == numThreads - 1)
+                ? height
+                : (i + 1) * rowsPerThread;
+
+            executor.submit(() -> {
+                for (int y = startY; y < endY; y++) {
+                    for (int x = 0; x < width; x++) {
+                        Color color = pixelReader.getColor(x, y);
+                        String hex = String.format(
+                            "#%02X%02X%02X",
+                            (int) (color.getRed() * 255),
+                            (int) (color.getGreen() * 255),
+                            (int) (color.getBlue() * 255)
+                        );
+                        colorFrequency.merge(hex, 1, Integer::sum);
+                    }
+                }
+            });
+        }
+
+        executor.shutdown();
+        try {
+            executor.awaitTermination(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return;
+        }
+
+        // Priority queue to find top 10 colors
+        PriorityQueue<ColorCount> pq = new PriorityQueue<>();
+        for (Map.Entry<String, Integer> entry : colorFrequency.entrySet()) {
+            pq.offer(new ColorCount(entry.getKey(), entry.getValue()));
+        }
+
+        // Get top 10 colors
+        topColors = new LinkedList<>();
+        for (int i = 0; i < 10 && !pq.isEmpty(); i++) {
+            ColorCount cc = pq.poll();
+            topColors.add(
+                String.format("%s: %d pixels", cc.hexColor, cc.count)
+            );
+        }
+
+        // Show results in alert on JavaFX thread
+        Platform.runLater(() -> {
+            Alert alert = new Alert(AlertType.INFORMATION);
+            alert.setTitle("Color Analysis");
+            alert.setHeaderText("Top 10 Most Common Colors in this image:");
+            alert.setContentText(String.join("\n", topColors));
+            alert.showAndWait();
+        });
+    }
+
     @Override
     public void start(Stage primaryStage) {
         primaryStage.setTitle("Image Processor");
 
         Scene welcomeScene = WelcomeScreen.createScene(primaryStage);
         primaryStage.setScene(welcomeScene);
+
+        primaryStage.setOnCloseRequest(e -> {
+            if (musicPlayer != null) {
+                musicPlayer.pauseMusic();
+            }
+        });
 
         primaryStage.show();
     }
@@ -71,9 +180,13 @@ public class TheImaniPulator extends Application {
         );
 
         Button loadButton = new Button("Choose Image");
+        Button analyzeButton = new Button("Analyze Colors"); // New button for color analysis
         styleButton(loadButton);
+        styleButton(analyzeButton);
 
-        leftSide.getChildren().addAll(imageView, loadButton, statusLabel);
+        leftSide
+            .getChildren()
+            .addAll(imageView, loadButton, analyzeButton, statusLabel);
 
         VBox rightSide = new VBox(15);
         rightSide.setAlignment(Pos.TOP_CENTER);
@@ -109,7 +222,7 @@ public class TheImaniPulator extends Application {
         Button gameOfLifeButton = new Button("Game of Life");
         Button playMusicButton = new Button("Play as Music");
         Button pauseMusicButton = new Button("Pause Music");
-        Button invertButton = new Button("Invert Colors");
+        Button vignetteButton = new Button("Vignette");
 
         int buttonWidth = 150;
         for (Button btn : new Button[] {
@@ -123,7 +236,7 @@ public class TheImaniPulator extends Application {
             gameOfLifeButton,
             playMusicButton,
             pauseMusicButton,
-            invertButton,
+            vignetteButton,
         }) {
             styleButton(btn);
             btn.setPrefWidth(buttonWidth);
@@ -137,7 +250,7 @@ public class TheImaniPulator extends Application {
         filterGrid.add(grayscaleButton, 1, 0);
         filterGrid.add(sepiaButton, 0, 1);
         filterGrid.add(resetButton, 1, 1);
-        filterGrid.add(invertButton, 0, 2);
+        filterGrid.add(vignetteButton, 0, 2);
 
         GridPane saveGrid = new GridPane();
         saveGrid.setHgap(10);
@@ -154,6 +267,13 @@ public class TheImaniPulator extends Application {
         musicGrid.setHgap(10);
         musicGrid.add(playMusicButton, 0, 0);
         musicGrid.add(pauseMusicButton, 1, 0);
+
+        analyzeButton.setOnAction(e -> {
+            if (originalImage != null) {
+                analyzeColors();
+                updateStatus("Analyzing Colors");
+            }
+        });
 
         blurButton.setOnAction(e -> {
             if (originalImage != null) {
@@ -179,11 +299,11 @@ public class TheImaniPulator extends Application {
             }
         });
 
-        invertButton.setOnAction(e -> {
+        vignetteButton.setOnAction(e -> {
             if (originalImage != null) {
-                setActiveButton(invertButton);
-                ImageProcessor.applyInvert(imageView);
-                updateStatus("Invert Colors");
+                setActiveButton(vignetteButton);
+                ImageProcessor.applyVignette(imageView);
+                updateStatus("Vignette");
             }
         });
 
@@ -225,7 +345,10 @@ public class TheImaniPulator extends Application {
                 setActiveButton(playMusicButton);
                 musicPlayer = new MusicPlayer();
                 musicPlayer.playImageAsMusic(originalImage);
-                updateStatus("Playing Music");
+                updateStatus(
+                    "Playing Music - " +
+                    String.format("%.1f%%", musicPlayer.getProgress() * 100)
+                );
             }
         });
 
