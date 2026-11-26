@@ -183,5 +183,12 @@ This project demonstrates advanced Java and JavaFX concepts while maintaining cl
 
 
 ## To run
+
+The bundled JavaFX JARs are from Gluon's JavaFX 23.0.2 SDK for Apple silicon
+(`macOS / AArch64`). Use an ARM64 JDK 21 or newer. The native libraries are not
+bundled: [download the matching SDK](https://download2.gluonhq.com/openjfx/23.0.2/openjfx-23.0.2_osx-aarch64_bin-sdk.zip),
+extract it, and set `PATH_TO_FX` to the SDK's `lib` directory.
+
 Compile: `javac -d bin --module-path lib --add-modules javafx.controls,javafx.graphics,javafx.base src/jfxlabproj/*.java`
-Run: `java --module-path lib --add-modules javafx.controls,javafx.graphics,javafx.base -cp bin jfxlabproj.TheImaniPulator`
+
+Run: `java -Djava.library.path="$PATH_TO_FX" --module-path lib --add-modules javafx.controls,javafx.graphics,javafx.base -cp bin jfxlabproj.TheImaniPulator`
